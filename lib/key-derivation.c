@@ -86,15 +86,40 @@ int derive_root_chain_and_header_keys(
 		bool am_i_alice) {
 	assert(crypto_secretbox_KEYBYTES == crypto_auth_KEYBYTES);
 
+	//FIXME remove this once the entire library is moved over to buffer_t
+	//Create buffers containing ephemeral keys
+	buffer_t *our_private_ephemeral_buffer = buffer_create(crypto_box_SECRETKEYBYTES, crypto_box_SECRETKEYBYTES);
+	int status = buffer_clone_from_raw(our_private_ephemeral_buffer, our_private_ephemeral, our_private_ephemeral_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
+
+	buffer_t *our_public_ephemeral_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+	status = buffer_clone_from_raw(our_public_ephemeral_buffer, our_public_ephemeral, our_public_ephemeral_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
+
+	buffer_t *their_public_ephemeral_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+	status = buffer_clone_from_raw(their_public_ephemeral_buffer, their_public_ephemeral, their_public_ephemeral_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
+
+
 	//input key for HKDF (root key and chain key derivation)
 	//input_key = DH(our_private_ephemeral, their_public_ephemeral)
 	buffer_t *input_key = buffer_create(crypto_secretbox_KEYBYTES, crypto_secretbox_KEYBYTES);
-	int status = diffie_hellman(
-			input_key->content,
-			our_private_ephemeral,
-			our_public_ephemeral,
-			their_public_ephemeral,
+	status = diffie_hellman(
+			input_key,
+			our_private_ephemeral_buffer,
+			our_public_ephemeral_buffer,
+			their_public_ephemeral_buffer,
 			am_i_alice);
+	buffer_clear(our_private_ephemeral_buffer);
 	if (status != 0) {
 		buffer_clear(input_key);
 		return status;
@@ -103,7 +128,12 @@ int derive_root_chain_and_header_keys(
 	//FIXME remove this once the entire library is moved over to buffer_t
 	//Copy previous root key into a new buffer
 	buffer_t *previous_root_key_buffer = buffer_create(crypto_secretbox_KEYBYTES, crypto_secretbox_KEYBYTES);
-	buffer_clone_from_raw(previous_root_key_buffer, previous_root_key, crypto_secretbox_KEYBYTES);
+	status = buffer_clone_from_raw(previous_root_key_buffer, previous_root_key, crypto_secretbox_KEYBYTES);
+	if (status != 0) {
+		buffer_clear(input_key);
+		buffer_clear(previous_root_key_buffer);
+		return status;
+	}
 
 	//now create root and chain key in temporary buffer
 	//RK, CK = HKDF(previous_root_key, input_key)
@@ -116,6 +146,7 @@ int derive_root_chain_and_header_keys(
 			input_key,
 			info);
 	buffer_clear(input_key);
+	buffer_clear(previous_root_key_buffer);
 	if (status != 0) {
 		buffer_clear(hkdf_buffer);
 		return status;

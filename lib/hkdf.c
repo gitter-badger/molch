@@ -43,12 +43,15 @@ int expand(
 	buffer_t *round_buffer = buffer_create(crypto_auth_BYTES + info->content_length + 1, crypto_auth_BYTES + info->content_length + 1);
 
 	//round_buffer = <empty>|info|0x01
-	buffer_clone(round_buffer, info);
+	int status;
+	status = buffer_clone(round_buffer, info);
+	if (status != 0) {
+		return status;
+	}
 	round_buffer->content[round_buffer->content_length] = 0x01;
 	round_buffer->content_length++;
 
 	//T(1) = HMAC-HASH(PRK, <empty>|info|0x01)
-	int status;
 	status = crypto_auth(
 			output_key->content, //will be T(0)|T(1) .... T(N) in the end (only T(0) for now)
 			round_buffer->content,
@@ -72,8 +75,16 @@ int expand(
 	for (pos = 1; pos < (n - 1); pos++) {
 		//create round_buffer T(pos)|info|pos+1
 		round_buffer->content_length = 0;
-		buffer_copy(round_buffer, 0, output_key, (pos - 1) * crypto_auth_BYTES, crypto_auth_BYTES);
-		buffer_concat(round_buffer, info);
+		status = buffer_copy(round_buffer, 0, output_key, (pos - 1) * crypto_auth_BYTES, crypto_auth_BYTES);
+		if (status != 0) {
+			buffer_clear(round_buffer);
+			return status;
+		}
+		status = buffer_concat(round_buffer, info);
+		if (status != 0) {
+			buffer_clear(round_buffer);
+			return status;
+		}
 		round_buffer->content[round_buffer->content_length] = (unsigned char) (pos + 1);
 		round_buffer->content_length++;
 
@@ -91,8 +102,16 @@ int expand(
 
 	//create round_buffer T(N-1)|info|N
 	round_buffer->content_length = 0;
-	buffer_copy(round_buffer, 0, output_key, (n - 2) * crypto_auth_BYTES, crypto_auth_BYTES);
-	buffer_concat(round_buffer, info);
+	status = buffer_copy(round_buffer, 0, output_key, (n - 2) * crypto_auth_BYTES, crypto_auth_BYTES);
+	if (status != 0) {
+		buffer_clear(round_buffer);
+		return status;
+	}
+	status = buffer_concat(round_buffer, info);
+	if (status != 0) {
+		buffer_clear(round_buffer);
+		return status;
+	}
 	round_buffer->content[round_buffer->content_length] = (unsigned char) n;
 	round_buffer->content_length++;
 
@@ -110,14 +129,16 @@ int expand(
 	}
 
 	//copy as many bytes of T(N) as fit into output_key
-	buffer_copy(
+	status = buffer_copy(
 			output_key, (n - 1) * crypto_auth_BYTES,
 			t_n_buffer,
 			0,
 			crypto_auth_BYTES - ((n * crypto_auth_BYTES) - output_key_length));
-
 	buffer_clear(t_n_buffer);
 	buffer_clear(round_buffer);
+	if (status != 0) {
+		return status;
+	}
 	return 0;
 }
 

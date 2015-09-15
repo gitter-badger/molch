@@ -44,13 +44,11 @@ int main(void) {
 	putchar('\n');
 
 	//info
-	const unsigned char info_string[] = "This is some info!";
-	buffer_t *info = buffer_create(sizeof(info_string), sizeof(info_string));
-	buffer_clone_from_raw(info, info_string, sizeof(info_string));
+	int status;
+	buffer_t *info = buffer_create_from_string("This is some info!");
 	printf("Info (%zu Bytes):\n", info->content_length); //this could also be binary data
 	printf("%s\n\n", info->content);
 
-	int status;
 	status = hkdf(output_key, output_key->buffer_length, salt, input_key, info);
 	if (status != 0) {
 		fprintf(stderr, "ERROR: Failed to derive key. %i\n", status);
