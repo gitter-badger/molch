@@ -148,59 +148,32 @@ int diffie_hellman(
  * -->Bob: HASH(DH(their_identity, our_ephemeral)||DH(our_identity, their_ephemeral)||DH(our_ephemeral, their_ephemeral))
  */
 int triple_diffie_hellman(
-		unsigned char * const derived_key,
-		const unsigned char * const our_private_identity,
-		const unsigned char * const our_public_identity,
-		const unsigned char * const our_private_ephemeral,
-		const unsigned char * const our_public_ephemeral,
-		const unsigned char * const their_public_identity,
-		const unsigned char * const their_public_ephemeral,
+		buffer_t * const derived_key,
+		const buffer_t * const our_private_identity,
+		const buffer_t * const our_public_identity,
+		const buffer_t * const our_private_ephemeral,
+		const buffer_t * const our_public_ephemeral,
+		const buffer_t * const their_public_identity,
+		const buffer_t * const their_public_ephemeral,
 		const bool am_i_alice) {
-	//FIXME: only temporary until everything else is ported to the new buffers:
-	buffer_t *our_private_identity_buffer = buffer_create(crypto_box_SECRETKEYBYTES, crypto_box_SECRETKEYBYTES);
-	int status = buffer_clone_from_raw(our_private_identity_buffer, our_private_identity, our_private_identity_buffer->content_length);
-	if (status != 0) {
-		buffer_clear(our_private_identity_buffer);
-		return status;
-	}
+	//set content length of output to 0 (can prevent use on failure)
+	derived_key->content_length = 0;
 
-	buffer_t *our_public_identity_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
-	status = buffer_clone_from_raw(our_public_identity_buffer, our_public_identity, our_public_identity_buffer->content_length);
-	if (status != 0) {
-		buffer_clear(our_private_identity_buffer);
-		return status;
-	}
-
-	buffer_t *our_private_ephemeral_buffer = buffer_create(crypto_box_SECRETKEYBYTES, crypto_box_SECRETKEYBYTES);
-	status = buffer_clone_from_raw(our_private_ephemeral_buffer, our_private_ephemeral, our_private_ephemeral_buffer->content_length);
-	if (status != 0) {
-		buffer_clear(our_private_identity_buffer);
-		buffer_clear(our_private_ephemeral_buffer);
-		return status;
-	}
-
-	buffer_t *our_public_ephemeral_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
-	status = buffer_clone_from_raw(our_public_ephemeral_buffer, our_public_ephemeral, our_public_ephemeral_buffer->content_length);
-	if (status != 0) {
-		buffer_clear(our_private_identity_buffer);
-		buffer_clear(our_private_ephemeral_buffer);
-		return status;
-	}
-
-	buffer_t *their_public_identity_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
-	status = buffer_clone_from_raw(their_public_identity_buffer, their_public_identity, their_public_identity_buffer->content_length);
-	if (status != 0) {
-		buffer_clear(our_private_identity_buffer);
-		buffer_clear(our_private_ephemeral_buffer);
-		return status;
-	}
-
-	buffer_t *their_public_ephemeral_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
-	status = buffer_clone_from_raw(their_public_ephemeral_buffer, their_public_ephemeral, their_public_ephemeral_buffer->content_length);
-	if (status != 0) {
-		buffer_clear(our_private_identity_buffer);
-		buffer_clear(our_private_ephemeral_buffer);
-		return status;
+	//check buffer sizes
+	if ((derived_key->buffer_length < crypto_generichash_BYTES)
+			|| (our_private_identity->content_length != crypto_box_SECRETKEYBYTES)
+			|| (our_public_identity->content_length != crypto_box_PUBLICKEYBYTES)
+			|| (their_public_identity->content_length != crypto_box_PUBLICKEYBYTES)
+			|| (our_private_ephemeral->content_length != crypto_box_SECRETKEYBYTES)
+			|| (our_public_ephemeral->content_length != crypto_box_PUBLICKEYBYTES)
+			|| (their_public_ephemeral->content_length != crypto_box_PUBLICKEYBYTES)
+			|| (our_private_identity->buffer_length < crypto_box_SECRETKEYBYTES)
+			|| (our_public_identity->buffer_length < crypto_box_PUBLICKEYBYTES)
+			|| (their_public_identity->buffer_length < crypto_box_PUBLICKEYBYTES)
+			|| (our_private_ephemeral->buffer_length < crypto_box_SECRETKEYBYTES)
+			|| (our_public_ephemeral->buffer_length < crypto_box_PUBLICKEYBYTES)
+			|| (their_public_ephemeral->buffer_length < crypto_box_PUBLICKEYBYTES)) {
+		return -6;
 	}
 
 	//buffers for all 3 Diffie Hellman exchanges
@@ -208,13 +181,14 @@ int triple_diffie_hellman(
 	buffer_t *dh2 = buffer_create(crypto_generichash_BYTES, crypto_generichash_BYTES);
 	buffer_t *dh3 = buffer_create(crypto_generichash_BYTES, crypto_generichash_BYTES);
 
+	int status;
 	if (am_i_alice) {
 		//DH(our_identity, their_ephemeral)
 		status = diffie_hellman(
 				dh1,
-				our_private_identity_buffer,
-				our_public_identity_buffer,
-				their_public_ephemeral_buffer,
+				our_private_identity,
+				our_public_identity,
+				their_public_ephemeral,
 				am_i_alice);
 		if (status != 0) {
 			buffer_clear(dh1);
@@ -224,9 +198,9 @@ int triple_diffie_hellman(
 		//DH(our_ephemeral, their_identity)
 		status = diffie_hellman(
 				dh2,
-				our_private_ephemeral_buffer,
-				our_public_ephemeral_buffer,
-				their_public_identity_buffer,
+				our_private_ephemeral,
+				our_public_ephemeral,
+				their_public_identity,
 				am_i_alice);
 		if (status != 0) {
 			buffer_clear(dh1);
@@ -237,9 +211,9 @@ int triple_diffie_hellman(
 		//DH(our_ephemeral, their_identity)
 		status = diffie_hellman(
 				dh1,
-				our_private_ephemeral_buffer,
-				our_public_ephemeral_buffer,
-				their_public_identity_buffer,
+				our_private_ephemeral,
+				our_public_ephemeral,
+				their_public_identity,
 				am_i_alice);
 		if (status != 0) {
 			buffer_clear(dh1);
@@ -249,9 +223,9 @@ int triple_diffie_hellman(
 		//DH(our_identity, their_ephemeral)
 		status = diffie_hellman(
 				dh2,
-				our_private_identity_buffer,
-				our_public_identity_buffer,
-				their_public_ephemeral_buffer,
+				our_private_identity,
+				our_public_identity,
+				their_public_ephemeral,
 				am_i_alice);
 		if (status != 0) {
 			buffer_clear(dh1);
@@ -264,9 +238,9 @@ int triple_diffie_hellman(
 	//this is identical for both Alice and Bob
 	status = diffie_hellman(
 			dh3,
-			our_private_ephemeral_buffer,
-			our_public_ephemeral_buffer,
-			their_public_ephemeral_buffer,
+			our_private_ephemeral,
+			our_public_ephemeral,
+			their_public_ephemeral,
 			am_i_alice);
 	if (status != 0) {
 		buffer_clear(dh1);
@@ -317,6 +291,6 @@ int triple_diffie_hellman(
 	}
 
 	//write final hash to output (derived_key)
-	status = crypto_generichash_final(&hash_state, derived_key, crypto_generichash_BYTES);
+	status = crypto_generichash_final(&hash_state, derived_key->content, crypto_generichash_BYTES);
 	return status;
 }

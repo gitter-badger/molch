@@ -181,19 +181,65 @@ int derive_initial_root_chain_and_header_keys(
 		const unsigned char * const our_public_ephemeral,
 		const unsigned char * const their_public_ephemeral,
 		bool am_i_alice) {
+	//FIXME: only temporary until everything else is ported to the new buffers:
+	buffer_t *our_private_identity_buffer = buffer_create(crypto_box_SECRETKEYBYTES, crypto_box_SECRETKEYBYTES);
+	int status = buffer_clone_from_raw(our_private_identity_buffer, our_private_identity, our_private_identity_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_identity_buffer);
+		return status;
+	}
+
+	buffer_t *our_public_identity_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+	status = buffer_clone_from_raw(our_public_identity_buffer, our_public_identity, our_public_identity_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_identity_buffer);
+		return status;
+	}
+
+	buffer_t *our_private_ephemeral_buffer = buffer_create(crypto_box_SECRETKEYBYTES, crypto_box_SECRETKEYBYTES);
+	status = buffer_clone_from_raw(our_private_ephemeral_buffer, our_private_ephemeral, our_private_ephemeral_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_identity_buffer);
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
+
+	buffer_t *our_public_ephemeral_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+	status = buffer_clone_from_raw(our_public_ephemeral_buffer, our_public_ephemeral, our_public_ephemeral_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_identity_buffer);
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
+
+	buffer_t *their_public_identity_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+	status = buffer_clone_from_raw(their_public_identity_buffer, their_public_identity, their_public_identity_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_identity_buffer);
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
+
+	buffer_t *their_public_ephemeral_buffer = buffer_create(crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+	status = buffer_clone_from_raw(their_public_ephemeral_buffer, their_public_ephemeral, their_public_ephemeral_buffer->content_length);
+	if (status != 0) {
+		buffer_clear(our_private_identity_buffer);
+		buffer_clear(our_private_ephemeral_buffer);
+		return status;
+	}
 	//derive pre_root_key to later derive the initial root key,
 	//header keys and chain keys from
 	//pre_root_key = HASH( DH(A,B0) || DH(A0,B) || DH(A0,B0) )
 	assert(crypto_secretbox_KEYBYTES == crypto_auth_BYTES);
 	buffer_t *pre_root_key = buffer_create(crypto_secretbox_KEYBYTES, crypto_secretbox_KEYBYTES);
-	int status = triple_diffie_hellman(
-			pre_root_key->content,
-			our_private_identity,
-			our_public_identity,
-			our_private_ephemeral,
-			our_public_ephemeral,
-			their_public_identity,
-			their_public_ephemeral,
+	status = triple_diffie_hellman(
+			pre_root_key,
+			our_private_identity_buffer,
+			our_public_identity_buffer,
+			our_private_ephemeral_buffer,
+			our_public_ephemeral_buffer,
+			their_public_identity_buffer,
+			their_public_ephemeral_buffer,
 			am_i_alice);
 	if (status != 0) {
 		buffer_clear(pre_root_key);
